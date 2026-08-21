@@ -1,0 +1,539 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin · OffGridPro</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+    <style>
+        /* (same as previous dashboard CSS – I'll include it once to save space) */
+        * { margin:0; padding:0; box-sizing:border-box; }
+        body { font-family:'Segoe UI',system-ui,sans-serif; background:#f1f5f9; color:#0f172a; }
+        .navbar { background:#0f172a; color:white; padding:0 2rem; height:70px; display:flex; align-items:center; justify-content:space-between; border-bottom:2px solid #3b82f6; position:sticky; top:0; z-index:1000; flex-wrap:wrap; }
+        .navbar .logo { font-size:1.5rem; font-weight:700; display:flex; align-items:center; gap:0.5rem; }
+        .navbar .logo span { color:#facc15; }
+        .navbar .badge { background:#1e293b; padding:0.3rem 1rem; border-radius:9999px; font-size:0.8rem; color:#94a3b8; border:1px solid #334155; }
+        .navbar .badge.online { background:#22c55e; color:white; border-color:#22c55e; }
+        .navbar .logout { color:#f87171; text-decoration:none; margin-left:1rem; }
+        .container { max-width:1400px; margin:0 auto; padding:20px; }
+        .grid-2 { display:grid; grid-template-columns:1fr 1fr; gap:20px; }
+        .grid-3 { display:grid; grid-template-columns:repeat(3,1fr); gap:20px; }
+        .grid-4 { display:grid; grid-template-columns:repeat(4,1fr); gap:20px; }
+        .card { background:white; border-radius:12px; padding:20px; box-shadow:0 1px 3px rgba(0,0,0,0.06); border:1px solid #e2e8f0; margin-bottom:20px; transition:box-shadow 0.2s; }
+        .card:hover { box-shadow:0 4px 12px rgba(0,0,0,0.08); }
+        .card h3 { font-size:1rem; font-weight:600; margin-bottom:1rem; color:#0f172a; display:flex; align-items:center; gap:0.5rem; }
+        .stat-number { font-size:2rem; font-weight:700; color:#0f172a; }
+        .stat-label { font-size:0.8rem; color:#64748b; }
+        .form-row { display:flex; gap:15px; flex-wrap:wrap; align-items:center; }
+        .form-row select, .form-row input { padding:10px 14px; border:2px solid #e2e8f0; border-radius:8px; font-size:0.9rem; flex:1; min-width:150px; background:white; }
+        .form-row select:focus, .form-row input:focus { outline:none; border-color:#3b82f6; }
+        .btn { padding:10px 20px; border:none; border-radius:8px; font-weight:600; cursor:pointer; transition:0.2s; }
+        .btn-primary { background:#3b82f6; color:white; }
+        .btn-primary:hover { background:#2563eb; transform:translateY(-2px); box-shadow:0 4px 12px rgba(59,130,246,0.3); }
+        .btn-success { background:#22c55e; color:white; }
+        .btn-success:hover { background:#16a34a; }
+        .btn-danger { background:#ef4444; color:white; }
+        .btn-danger:hover { background:#dc2626; }
+        .btn-sm { padding:4px 12px; font-size:0.75rem; }
+        .trade-table { width:100%; border-collapse:collapse; font-size:0.9rem; }
+        .trade-table th { background:#f8fafc; text-align:left; padding:8px 12px; font-weight:600; color:#475569; }
+        .trade-table td { padding:8px 12px; border-bottom:1px solid #e2e8f0; }
+        .trade-table tr:last-child td { border-bottom:none; }
+        .status-badge { display:inline-block; padding:2px 12px; border-radius:9999px; font-size:0.75rem; font-weight:600; }
+        .status-pending { background:#fefcbf; color:#975a16; }
+        .status-completed { background:#c6f6d5; color:#22543d; }
+        .status-failed { background:#fed7d7; color:#9b2c2c; }
+        .chart-container { height:200px; width:100%; }
+        .map-container { height:400px; border-radius:8px; border:1px solid #e2e8f0; }
+        .modal { display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.5); align-items:center; justify-content:center; z-index:2000; }
+        .modal.show { display:flex; }
+        .modal-content { background:white; padding:30px; border-radius:12px; max-width:500px; width:90%; max-height:90vh; overflow-y:auto; }
+        .modal-content .detail { background:#f8fafc; padding:12px; border-radius:8px; margin:10px 0; font-size:0.9rem; }
+        .prediction-grid { display:flex; gap:10px; flex-wrap:wrap; }
+        .prediction-item { background:#f8fafc; padding:12px 16px; border-radius:8px; text-align:center; min-width:100px; flex:1; }
+        .prediction-item .date { font-size:0.7rem; color:#64748b; }
+        .prediction-item .revenue { font-weight:700; color:#0f172a; }
+        .prediction-item .energy { font-size:0.8rem; color:#22c55e; }
+        .anomaly-badge { display:inline-block; padding:2px 8px; border-radius:4px; font-size:0.7rem; font-weight:600; }
+        .anomaly-high { background:#fed7d7; color:#9b2c2c; }
+        .anomaly-warning { background:#fefcbf; color:#975a16; }
+        /* Chat widget */
+        #chatWidget { position:fixed; bottom:20px; right:20px; z-index:9999; }
+        #chatWidget button { background:#3b82f6; color:white; border:none; border-radius:50%; width:60px; height:60px; font-size:28px; box-shadow:0 4px 12px rgba(0,0,0,0.3); cursor:pointer; }
+        #chatBox { display:none; position:absolute; bottom:70px; right:0; width:350px; max-height:400px; background:white; border-radius:12px; box-shadow:0 4px 20px rgba(0,0,0,0.2); overflow:hidden; border:1px solid #e2e8f0; }
+        #chatBox .header { background:#0f172a; color:white; padding:10px 15px; font-weight:bold; }
+        #chatMessages { height:250px; overflow-y:auto; padding:10px; background:#f8fafc; }
+        #chatMessages div { margin:5px 0; }
+        #chatInput { flex:1; padding:8px; border:1px solid #cbd5e1; border-radius:6px; margin-right:8px; }
+        @media (max-width:768px) {
+            .grid-2, .grid-3, .grid-4 { grid-template-columns:1fr; }
+            .navbar { flex-direction:column; height:auto; padding:10px; gap:5px; }
+            .map-container { height:250px; }
+            .form-row { flex-direction:column; }
+            .form-row select, .form-row input { width:100%; }
+            #chatBox { width:280px; right:-10px; }
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar">
+        <div class="logo">⚡ OffGridPro <span>Enugu</span></div>
+        <div style="display:flex; gap:15px; align-items:center; flex-wrap:wrap;">
+            <span class="badge">🌍 Enugu State</span>
+            <span class="badge online">🟢 Live</span>
+            <span class="badge" id="blockchainBadge">⛓️ 0 TX</span>
+            <span class="badge" id="smsBadge">📱 SMS: Ready</span>
+            <a href="/logout" class="logout">🚪 Logout</a>
+        </div>
+    </nav>
+
+    <div class="container">
+        <!-- Stats -->
+        <div class="grid-4" id="statsRow">
+            <div class="card"><div class="stat-number" id="totalTrades">0</div><div class="stat-label">Total Trades</div></div>
+            <div class="card"><div class="stat-number" id="completedTrades">0</div><div class="stat-label">✅ Completed</div></div>
+            <div class="card"><div class="stat-number" id="pendingTrades">0</div><div class="stat-label">⏳ Pending</div></div>
+            <div class="card"><div class="stat-number" id="totalRevenue">₦0</div><div class="stat-label">💰 Total Revenue</div></div>
+        </div>
+
+        <!-- Map + Charts -->
+        <div class="grid-2">
+            <div class="card">
+                <h3>📍 Live Energy Map</h3>
+                <div class="map-container" id="map"></div>
+                <div style="margin-top:8px; font-size:0.8rem; color:#64748b;">
+                    <span style="display:inline-block; background:#22c55e; width:12px; height:12px; border-radius:50%;"></span> Producer &nbsp;
+                    <span style="display:inline-block; background:#3b82f6; width:12px; height:12px; border-radius:50%;"></span> Consumer
+                </div>
+            </div>
+            <div>
+                <div class="card"><h3>📈 Daily Revenue (₦)</h3><div class="chart-container"><canvas id="revenueChart"></canvas></div></div>
+                <div class="card"><h3>⚡ Energy Traded (kWh)</h3><div class="chart-container"><canvas id="energyChart"></canvas></div></div>
+            </div>
+        </div>
+
+        <!-- Predictions -->
+        <div class="card">
+            <h3>🔮 AI Predictions (Next 7 Days)</h3>
+            <div id="predictionsContainer" class="prediction-grid"><p style="color:#94a3b8; width:100%;">Loading...</p></div>
+            <div style="margin-top:10px; font-size:0.75rem; color:#64748b;">🤖 Based on historical patterns</div>
+        </div>
+
+        <!-- Anomalies -->
+        <div class="card">
+            <h3>🚨 Anomaly Detection</h3>
+            <div id="anomalyContainer"><p style="color:#94a3b8;">Monitoring...</p></div>
+        </div>
+
+        <!-- Create Trade -->
+        <div class="card">
+            <h3>💡 Create a Trade</h3>
+            <div class="form-row">
+                <select id="producerSelect"><option value="">Select Producer...</option></select>
+                <select id="consumerSelect"><option value="">Select Consumer...</option></select>
+                <input type="number" id="wattHours" placeholder="Watt-hours" value="3000" min="500" max="10000">
+                <button class="btn btn-primary" onclick="createTrade()">⚡ Start Trade</button>
+            </div>
+        </div>
+
+        <!-- Trade Ledger + Blockchain -->
+        <div class="grid-2">
+            <div class="card">
+                <h3>📊 Trade Ledger</h3>
+                <div style="margin-bottom:10px;"><button class="btn btn-sm btn-success" onclick="refreshData()">🔄 Refresh</button></div>
+                <div id="tradeTableContainer" style="max-height:400px; overflow-y:auto;"><p style="color:#94a3b8;">No trades yet.</p></div>
+            </div>
+            <div class="card">
+                <h3>⛓️ Blockchain Ledger</h3>
+                <div id="blockchainContainer" style="max-height:200px; overflow-y:auto; font-size:0.8rem;"><p style="color:#94a3b8;">No transactions.</p></div>
+                <div style="margin-top:10px; font-size:0.75rem; color:#64748b;">⚡ Each trade is recorded on the blockchain</div>
+            </div>
+        </div>
+
+        <!-- SMS Log -->
+        <div class="card" style="background:#f8fafc;">
+            <h3>📱 SMS Alert Log</h3>
+            <div id="smsLog" style="max-height:80px; overflow-y:auto; font-size:0.85rem; color:#334155;">No SMS sent yet.</div>
+        </div>
+    </div>
+
+    <!-- Chat Widget -->
+    <div id="chatWidget">
+        <button onclick="toggleChat()">💬</button>
+        <div id="chatBox">
+            <div class="header">🤖 Trade Assistant</div>
+            <div id="chatMessages"></div>
+            <div style="display:flex; padding:10px; border-top:1px solid #e2e8f0;">
+                <input id="chatInput" type="text" placeholder="Ask me anything..." style="flex:1; padding:8px; border:1px solid #cbd5e1; border-radius:6px;">
+                <button onclick="sendMessage()" style="background:#3b82f6; color:white; border:none; padding:8px 15px; border-radius:6px; margin-left:8px;">Send</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal -->
+    <div class="modal" id="resultModal">
+        <div class="modal-content">
+            <h3 id="modalTitle">Result</h3>
+            <p id="modalMessage"></p>
+            <div id="modalDetails" class="detail"></div>
+            <br>
+            <button class="btn btn-primary" onclick="closeModal()">Close</button>
+        </div>
+    </div>
+
+    <script>
+        // ============================================
+        // All JavaScript (same as before + chat)
+        // ============================================
+        let usersData = [];
+        let pendingTrades = [];
+        let completedTrades = [];
+        let blockchainTxs = [];
+        let smsLogs = [];
+        let revenueChart = null;
+        let energyChart = null;
+        let map = null;
+        let markers = [];
+
+        const socket = io();
+        socket.on('new_trade', () => { refreshData(); });
+
+        async function fetchUsers() {
+            const res = await fetch('/api/users');
+            usersData = await res.json();
+            populateSelects();
+            updateMap();
+        }
+
+        async function fetchTrades() {
+            const res = await fetch('/api/trades');
+            const data = await res.json();
+            pendingTrades = data.pending || [];
+            completedTrades = data.completed || [];
+            blockchainTxs = data.blockchain || [];
+            updateStats(data.stats || {});
+            renderTradeTable();
+            renderBlockchain();
+            updateBadges();
+        }
+
+        async function fetchStats() {
+            const res = await fetch('/api/stats');
+            const stats = await res.json();
+            updateChartsWithData(stats);
+        }
+
+        async function fetchPredictions() {
+            try {
+                const res = await fetch('/api/predictions');
+                const data = await res.json();
+                const container = document.getElementById('predictionsContainer');
+                container.innerHTML = data.map(p => `
+                    <div class="prediction-item">
+                        <div class="date">${p.date}</div>
+                        <div class="revenue">₦${p.predicted_revenue}</div>
+                        <div class="energy">${p.predicted_energy} kWh</div>
+                    </div>
+                `).join('');
+            } catch (e) { console.error(e); }
+        }
+
+        async function fetchAnomalies() {
+            try {
+                const res = await fetch('/api/anomalies');
+                const data = await res.json();
+                const container = document.getElementById('anomalyContainer');
+                if (data.length === 0) {
+                    container.innerHTML = '<p style="color:#22c55e;">✅ No anomalies detected.</p>';
+                } else {
+                    container.innerHTML = data.map(a => `
+                        <div style="padding:8px 12px; background:${a.severity === 'high' ? '#fee2e2' : '#fef3c7'}; border-radius:6px; margin:4px 0;">
+                            <span class="anomaly-badge ${a.severity === 'high' ? 'anomaly-high' : 'anomaly-warning'}">${a.severity}</span>
+                            ${a.message} <span style="font-size:0.7rem; color:#64748b;">(${a.trade_id})</span>
+                        </div>
+                    `).join('');
+                }
+            } catch (e) { console.error(e); }
+        }
+
+        function populateSelects() {
+            const prodSel = document.getElementById('producerSelect');
+            const consSel = document.getElementById('consumerSelect');
+            prodSel.innerHTML = '<option value="">Select Producer...</option>';
+            consSel.innerHTML = '<option value="">Select Consumer...</option>';
+            usersData.forEach(u => {
+                const opt = document.createElement('option');
+                opt.value = u.id;
+                opt.textContent = `${u.name} (${u.location})`;
+                if (u.type === 'producer') prodSel.appendChild(opt);
+                else consSel.appendChild(opt);
+            });
+        }
+
+        function updateStats(stats) {
+            document.getElementById('totalTrades').textContent = stats.total_trades || 0;
+            document.getElementById('completedTrades').textContent = stats.completed_trades || 0;
+            document.getElementById('pendingTrades').textContent = stats.pending_trades || 0;
+            document.getElementById('totalRevenue').textContent = `₦${(stats.total_revenue || 0).toFixed(2)}`;
+        }
+
+        function updateBadges() {
+            document.getElementById('blockchainBadge').textContent = `⛓️ ${blockchainTxs.length} TX`;
+            document.getElementById('smsBadge').textContent = `📱 SMS: ${smsLogs.length} sent`;
+        }
+
+        function renderTradeTable() {
+            const container = document.getElementById('tradeTableContainer');
+            const all = [...pendingTrades, ...completedTrades];
+            if (all.length === 0) {
+                container.innerHTML = '<p style="color:#94a3b8;">No trades yet.</p>';
+                return;
+            }
+            let html = `<table class="trade-table"><thead><tr><th>ID</th><th>Producer</th><th>Consumer</th><th>kWh</th><th>Amount</th><th>Status</th><th>Action</th></tr></thead><tbody>`;
+            all.slice().reverse().forEach(t => {
+                const statusClass = t.status === 'pending' ? 'status-pending' : t.status === 'completed' ? 'status-completed' : 'status-failed';
+                const action = t.status === 'pending' ? `<button class="btn btn-sm btn-success" onclick="validateTrade('${t.id}')">✅ Validate</button>` : '-';
+                const tx = t.blockchain_tx ? `🔗 ${t.blockchain_tx.slice(0,8)}...` : '';
+                html += `<tr>
+                    <td style="font-size:0.75rem;">${t.id.slice(-8)}</td>
+                    <td>${t.producer}</td>
+                    <td>${t.consumer}</td>
+                    <td>${t.kwh}</td>
+                    <td>₦${t.total_price}</td>
+                    <td><span class="status-badge ${statusClass}">${t.status}</span> ${tx}</td>
+                    <td>${action}</td>
+                </tr>`;
+            });
+            html += '</tbody></table>';
+            container.innerHTML = html;
+        }
+
+        function renderBlockchain() {
+            const container = document.getElementById('blockchainContainer');
+            if (blockchainTxs.length === 0) {
+                container.innerHTML = '<p style="color:#94a3b8;">No transactions yet.</p>';
+                return;
+            }
+            let html = '';
+            blockchainTxs.slice().reverse().forEach(tx => {
+                html += `<div style="padding:4px 0; border-bottom:1px solid #f1f5f9;">
+                    🔗 ${tx.tx_hash.slice(0,12)}... | ₦${tx.amount} | Block ${tx.block} | ${new Date(tx.timestamp).toLocaleString()}
+                </div>`;
+            });
+            container.innerHTML = html;
+        }
+
+        function updateChartsWithData(stats) {
+            const revenueData = stats.daily_revenue || [];
+            const energyData = stats.daily_energy || [];
+            if (revenueChart) {
+                revenueChart.data.labels = revenueData.map(d => d.date);
+                revenueChart.data.datasets[0].data = revenueData.map(d => d.revenue);
+                revenueChart.update();
+            } else {
+                const ctx1 = document.getElementById('revenueChart').getContext('2d');
+                revenueChart = new Chart(ctx1, {
+                    type: 'bar',
+                    data: {
+                        labels: revenueData.map(d => d.date),
+                        datasets: [{
+                            label: 'Revenue (₦)',
+                            data: revenueData.map(d => d.revenue),
+                            backgroundColor: 'rgba(59,130,246,0.7)',
+                            borderColor: '#3b82f6',
+                            borderWidth: 1
+                        }]
+                    },
+                    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
+                });
+            }
+            if (energyChart) {
+                energyChart.data.labels = energyData.map(d => d.date);
+                energyChart.data.datasets[0].data = energyData.map(d => d.kwh);
+                energyChart.update();
+            } else {
+                const ctx2 = document.getElementById('energyChart').getContext('2d');
+                energyChart = new Chart(ctx2, {
+                    type: 'line',
+                    data: {
+                        labels: energyData.map(d => d.date),
+                        datasets: [{
+                            label: 'Energy (kWh)',
+                            data: energyData.map(d => d.kwh),
+                            backgroundColor: 'rgba(34,197,94,0.2)',
+                            borderColor: '#22c55e',
+                            borderWidth: 2,
+                            fill: true,
+                            tension: 0.3
+                        }]
+                    },
+                    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
+                });
+            }
+        }
+
+        function updateMap() {
+            if (!map) {
+                map = L.map('map').setView([6.4542, 7.4940], 13);
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap' }).addTo(map);
+                L.control.scale({ position: 'bottomleft' }).addTo(map);
+            }
+            markers.forEach(m => map.removeLayer(m));
+            markers = [];
+            usersData.forEach(u => {
+                const isProducer = u.type === 'producer';
+                const icon = L.divIcon({
+                    className: 'custom-marker',
+                    html: `<div style="width:34px;height:34px;background:${isProducer?'#22c55e':'#3b82f6'};border-radius:50%;border:3px solid white;box-shadow:0 2px 8px rgba(0,0,0,0.3);display:flex;align-items:center;justify-content:center;font-size:16px;color:white;">${isProducer?'☀️':'🏪'}</div>`,
+                    iconSize: [34,34],
+                    iconAnchor: [17,17],
+                    popupAnchor: [0,-22]
+                });
+                const marker = L.marker([u.lat, u.lng], { icon }).addTo(map);
+                const details = isProducer ? `⚡ ${u.details.capacity} | Excess: ${u.details.excess}` : `📦 ${u.details.business}`;
+                marker.bindPopup(`
+                    <div style="font-family:Segoe UI;min-width:180px;padding:4px;">
+                        <b>${u.name}</b><br>📍 ${u.location}<br>${details}
+                        <br><span style="display:inline-block;background:${isProducer?'#c6f6d5':'#bee3f8'};padding:1px 10px;border-radius:12px;font-size:11px;font-weight:600;">${isProducer?'☀️ Producer':'🏪 Consumer'}</span>
+                    </div>
+                `);
+                markers.push(marker);
+            });
+            if (markers.length) {
+                const group = L.featureGroup(markers);
+                map.fitBounds(group.getBounds().pad(0.15));
+            }
+        }
+
+        async function createTrade() {
+            const producerKey = document.getElementById('producerSelect').value;
+            const consumerKey = document.getElementById('consumerSelect').value;
+            const wattHours = parseFloat(document.getElementById('wattHours').value);
+            if (!producerKey || !consumerKey) { alert('Select both sides.'); return; }
+            if (!wattHours || wattHours < 500) { alert('Minimum 500 Wh.'); return; }
+            const producer = usersData.find(u => u.id === producerKey);
+            const consumer = usersData.find(u => u.id === consumerKey);
+            if (!producer || !consumer) { alert('User not found.'); return; }
+            try {
+                const res = await fetch('/api/trades', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ producer: producer.name, consumer: consumer.name, watt_hours: wattHours })
+                });
+                const data = await res.json();
+                if (data.error) { alert(data.error); return; }
+                showModal('✅ Trade Created!', `${consumer.name} buys ${wattHours/1000}kWh from ${producer.name} for ₦${data.total_price}`, `Trade ID: ${data.id}`);
+                refreshData();
+            } catch (e) { alert('Error: '+e.message); }
+        }
+
+        async function validateTrade(tradeId) {
+            try {
+                const res = await fetch(`/api/trades/${tradeId}/validate`, { method: 'POST' });
+                const data = await res.json();
+                if (data.error) { alert(data.error); return; }
+                if (data.status === 'completed') {
+                    smsLogs.push(`✅ Trade ${tradeId}: SMS sent`);
+                    updateSmsLog();
+                    showModal('✅ Power Delivered!', `Trade ${tradeId} completed.`,
+                        `🟢 Producer: ₦${data.producer_payout}<br>🟡 DisCo: ₦${data.disco_fee}<br>🔵 Platform: ₦${data.platform_fee}<br>⛓️ TX: ${data.tx_hash}`
+                    );
+                } else {
+                    smsLogs.push(`❌ Trade ${tradeId}: failed, refunded`);
+                    updateSmsLog();
+                    showModal('❌ Delivery Failed', `Trade ${tradeId} failed.`, 'Consumer refunded.');
+                }
+                refreshData();
+            } catch (e) { alert('Error: '+e.message); }
+        }
+
+        function refreshData() {
+            fetchTrades();
+            fetchStats();
+            fetchPredictions();
+            fetchAnomalies();
+            fetchUsers();
+        }
+
+        function showModal(title, message, details) {
+            document.getElementById('modalTitle').textContent = title;
+            document.getElementById('modalMessage').textContent = message;
+            document.getElementById('modalDetails').innerHTML = details || '';
+            document.getElementById('resultModal').classList.add('show');
+        }
+
+        function closeModal() {
+            document.getElementById('resultModal').classList.remove('show');
+        }
+
+        function updateSmsLog() {
+            const container = document.getElementById('smsLog');
+            if (smsLogs.length === 0) {
+                container.innerHTML = 'No SMS sent yet.';
+                return;
+            }
+            container.innerHTML = smsLogs.slice(-5).map(msg => `<div>📱 ${msg}</div>`).join('');
+            updateBadges();
+        }
+
+        // ============================
+        // Chat Widget
+        // ============================
+        function toggleChat() {
+            const box = document.getElementById('chatBox');
+            box.style.display = box.style.display === 'none' ? 'block' : 'none';
+        }
+
+        async function sendMessage() {
+            const input = document.getElementById('chatInput');
+            const msg = input.value.trim();
+            if (!msg) return;
+            input.value = '';
+            addChatMessage('You', msg);
+            try {
+                const res = await fetch('/api/chat', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ message: msg })
+                });
+                const data = await res.json();
+                addChatMessage('Assistant', data.response);
+            } catch (e) {
+                addChatMessage('Assistant', '❌ Error connecting to assistant.');
+            }
+        }
+
+        function addChatMessage(sender, text) {
+            const container = document.getElementById('chatMessages');
+            const div = document.createElement('div');
+            div.style.margin = '5px 0';
+            div.innerHTML = `<strong>${sender}:</strong> ${text}`;
+            container.appendChild(div);
+            container.scrollTop = container.scrollHeight;
+        }
+
+        document.getElementById('chatInput').addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') sendMessage();
+        });
+
+        // ============================
+        // Init
+        // ============================
+        document.addEventListener('DOMContentLoaded', () => {
+            refreshData();
+            setInterval(refreshData, 15000);
+            document.getElementById('resultModal').addEventListener('click', function(e) {
+                if (e.target === this) closeModal();
+            });
+            window.addEventListener('resize', () => {
+                if (map) setTimeout(() => map.invalidateSize(), 300);
+                if (revenueChart) revenueChart.resize();
+                if (energyChart) energyChart.resize();
+            });
+        });
+    </script>
+</body>
+</html>

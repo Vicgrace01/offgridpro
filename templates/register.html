@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Register · OffGridPro</title>
+    <style>
+        * { margin:0; padding:0; box-sizing:border-box; }
+        body { font-family:'Segoe UI',sans-serif; background:#f1f5f9; display:flex; justify-content:center; align-items:center; min-height:100vh; }
+        .card { background:white; padding:40px; border-radius:12px; box-shadow:0 4px 20px rgba(0,0,0,0.1); width:100%; max-width:400px; }
+        .card h2 { margin-bottom:20px; color:#0f172a; }
+        .card input, .card select { width:100%; padding:12px; margin-bottom:15px; border:2px solid #e2e8f0; border-radius:8px; }
+        .card button { width:100%; padding:12px; background:#3b82f6; color:white; border:none; border-radius:8px; font-weight:bold; font-size:1rem; cursor:pointer; }
+        .card .link { margin-top:15px; text-align:center; }
+        .card .link a { color:#3b82f6; text-decoration:none; }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <h2>📝 Register</h2>
+        <form method="POST">
+            <input type="text" name="name" placeholder="Full Name" required>
+            <input type="email" name="email" placeholder="Email" required>
+            <input type="password" name="password" placeholder="Password" required>
+            <select name="role" required>
+                <option value="producer">☀️ Producer (I have solar)</option>
+                <option value="consumer">🏪 Consumer (I need power)</option>
+            </select>
+            <button type="submit">Register</button>
+        </form>
+        <div class="link">Already have an account? <a href="/login">Log In</a></div>
+    </div>
+</body>
+</html>

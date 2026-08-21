@@ -1,0 +1,88 @@
+<!-- templates/index.html -->
+<!DOCTYPE html>
+<html>
+<head>
+    <title>OffGridPro - Enugu P2P Energy Trading</title>
+    <style>
+        body { font-family: Arial; max-width: 800px; margin: 0 auto; padding: 20px; background: #f5f5f5; }
+        .card { background: white; padding: 20px; border-radius: 10px; margin-bottom: 20px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+        input, button { padding: 10px; margin: 5px; }
+        button { background: #0066cc; color: white; border: none; border-radius: 5px; cursor: pointer; }
+        button:hover { background: #0055aa; }
+        .pending { color: orange; }
+        .completed { color: green; }
+        .failed { color: red; }
+    </style>
+</head>
+<body>
+    <h1>🏠 OffGridPro</h1>
+    <p>Neighbor-to-Neighbor Energy Trading for Enugu</p>
+
+    <div class="card">
+        <h3>Create a Trade</h3>
+        <input id="producer" placeholder="Producer name" value="Mr. Ade">
+        <input id="consumer" placeholder="Consumer name" value="Mama Bose">
+        <input id="watts" placeholder="Watt-hours (e.g., 3000)" value="3000">
+        <button onclick="createTrade()">Create Trade</button>
+    </div>
+
+    <div class="card">
+        <h3>All Trades</h3>
+        <div id="trades">Loading...</div>
+    </div>
+
+    <script>
+        async function loadTrades() {
+            const response = await fetch('/api/trades');
+            const data = await response.json();
+            
+            let html = '';
+            
+            if (data.pending.length > 0) {
+                html += '<h4>🟡 Pending</h4>';
+                data.pending.forEach(t => {
+                    html += `<div class="pending">${t.trade_id}: ${t.consumer} ← ${t.producer} (${t.watt_hours/1000}kWh, ₦${t.total_price}) 
+                            <button onclick="validate('${t.trade_id}')">Validate</button></div>`;
+                });
+            }
+            
+            if (data.completed.length > 0) {
+                html += '<h4>🟢 Completed</h4>';
+                data.completed.forEach(t => {
+                    const statusClass = t.status === 'completed' ? 'completed' : 'failed';
+                    html += `<div class="${statusClass}">${t.trade_id}: ${t.consumer} ← ${t.producer} (${t.watt_hours/1000}kWh, ₦${t.total_price}) - ${t.status}</div>`;
+                });
+            }
+            
+            if (!data.pending.length && !data.completed.length) {
+                html = 'No trades yet. Create one above!';
+            }
+            
+            document.getElementById('trades').innerHTML = html;
+        }
+
+        async function createTrade() {
+            const producer = document.getElementById('producer').value;
+            const consumer = document.getElementById('consumer').value;
+            const watt_hours = document.getElementById('watts').value;
+            
+            await fetch('/api/trades', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ producer, consumer, watt_hours })
+            });
+            
+            loadTrades();
+        }
+
+        async function validate(tradeId) {
+            await fetch(`/api/trades/${tradeId}/validate`, { method: 'POST' });
+            loadTrades();
+        }
+
+        // Load trades every 5 seconds
+        loadTrades();
+        setInterval(loadTrades, 5000);
+    </script>
+</body>
+</html>

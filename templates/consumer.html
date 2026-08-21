@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Consumer · OffGridPro</title>
+    <style>
+        * { margin:0; padding:0; box-sizing:border-box; }
+        body { font-family:'Segoe UI',sans-serif; background:#f1f5f9; color:#0f172a; }
+        .navbar { background:#0f172a; color:white; padding:1rem 2rem; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; }
+        .navbar .logo { font-size:1.5rem; font-weight:700; }
+        .navbar .logo span { color:#facc15; }
+        .navbar .logout { color:#f87171; text-decoration:none; }
+        .container { max-width:1200px; margin:0 auto; padding:20px; }
+        .card { background:white; border-radius:12px; padding:20px; box-shadow:0 1px 3px rgba(0,0,0,0.06); border:1px solid #e2e8f0; margin-bottom:20px; }
+        .grid-2 { display:grid; grid-template-columns:1fr 1fr; gap:20px; }
+        .stat-number { font-size:2rem; font-weight:700; }
+        .stat-label { color:#64748b; }
+        .trade-table { width:100%; border-collapse:collapse; font-size:0.9rem; }
+        .trade-table th { background:#f8fafc; text-align:left; padding:8px 12px; }
+        .trade-table td { padding:8px 12px; border-bottom:1px solid #e2e8f0; }
+        .status-badge { display:inline-block; padding:2px 12px; border-radius:9999px; font-size:0.75rem; font-weight:600; }
+        .status-pending { background:#fefcbf; color:#975a16; }
+        .status-completed { background:#c6f6d5; color:#22543d; }
+        .status-failed { background:#fed7d7; color:#9b2c2c; }
+        .btn { background:#3b82f6; color:white; padding:10px 20px; border:none; border-radius:8px; font-weight:600; cursor:pointer; }
+        @media (max-width:768px) { .grid-2 { grid-template-columns:1fr; } }
+    </style>
+</head>
+<body>
+    <nav class="navbar">
+        <div class="logo">🏪 OffGridPro <span>Consumer</span></div>
+        <div>
+            <span style="margin-right:1rem;">Welcome, {{ user['name'] }}</span>
+            <a href="/logout" class="logout">🚪 Logout</a>
+        </div>
+    </nav>
+    <div class="container">
+        <div class="grid-2">
+            <div class="card">
+                <div class="stat-number">₦{{ total_spent|round(2) }}</div>
+                <div class="stat-label">Total Spent</div>
+            </div>
+            <div class="card">
+                <div class="stat-number">{{ trades|length }}</div>
+                <div class="stat-label">Purchases</div>
+            </div>
+        </div>
+
+        <div class="card">
+            <h3>📊 Your Purchases</h3>
+            {% if trades %}
+            <table class="trade-table">
+                <thead><tr><th>ID</th><th>Producer</th><th>kWh</th><th>Amount</th><th>Status</th></tr></thead>
+                <tbody>
+                {% for t in trades %}
+                <tr>
+                    <td>{{ t['id'][-8:] }}</td>
+                    <td>{{ t['producer'] }}</td>
+                    <td>{{ t['kwh'] }}</td>
+                    <td>₦{{ t['total_price'] }}</td>
+                    <td><span class="status-badge status-{{ t['status'] }}">{{ t['status'] }}</span></td>
+                </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+            {% else %}
+            <p style="color:#94a3b8;">You haven't bought any power yet. Go to the admin dashboard to create a trade or use the chat assistant.</p>
+            {% endif %}
+        </div>
+
+        <div class="card">
+            <p>💡 You can also buy power using the AI chat assistant (click the 💬 button in the admin dashboard).</p>
+        </div>
+    </div>
+</body>
+</html>
