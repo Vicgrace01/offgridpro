@@ -85,7 +85,7 @@ def init_db():
     ''')
     conn.commit()
 
-    # Define default users (always defined, no UnboundLocalError)
+    # Define default users
     default_users = [
         ('mr_ade', 'Mr. Adebayo', 'producer', 'Awkunanaw, Enugu', '5kW', '4.5kWh', '+2348012345678', ''),
         ('mama_bose', 'Mama Bose', 'consumer', 'Awkunanaw, Enugu', '', '', '+2348087654321', 'Shop'),
@@ -257,16 +257,12 @@ def register():
         email = request.form['email']
         password = request.form['password']
         role = request.form['role']
-        # Create a user_id from email prefix
         user_id = email.split('@')[0]
-        # Insert user profile
         conn = get_db()
-        # Check if user_id already exists
         cur = conn.execute("SELECT COUNT(*) FROM users WHERE id = ?", (user_id,))
         if cur.fetchone()[0] == 0:
             conn.execute("INSERT INTO users (id, name, type, location, capacity, excess, phone, business) VALUES (?,?,?,?,?,?,?,?)",
                          (user_id, name, role, 'Enugu', '', '', '', ''))
-        # Insert account
         hashed = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt())
         conn.execute("INSERT INTO accounts (user_id, email, password_hash, role) VALUES (?,?,?,?)",
                      (user_id, email, hashed, role))
@@ -296,10 +292,8 @@ def producer_dashboard():
     if current_user.role != 'producer':
         return "Access denied", 403
     conn = get_db()
-    # Get producer info
     user = conn.execute("SELECT * FROM users WHERE id = ?", (current_user.user_id,)).fetchone()
     trades = conn.execute("SELECT * FROM trades WHERE producer = ? ORDER BY created_at DESC", (user['name'],)).fetchall()
-    # Calculate total earnings
     total_earnings = conn.execute("SELECT SUM(total_price) FROM trades WHERE producer = ? AND status='completed'", (user['name'],)).fetchone()[0] or 0
     conn.close()
     return render_template('producer.html', user=user, trades=trades, total_earnings=total_earnings)
@@ -396,7 +390,6 @@ def validate_trade(trade_id):
         tx_hash, block = simulate_blockchain(trade_id, total)
         conn.execute("UPDATE trades SET blockchain_tx = ? WHERE id = ?", (tx_hash, trade_id))
         conn.commit()
-        # SMS simulation
         producer_phone = conn.execute("SELECT phone FROM users WHERE name = ?", (trade['producer'],)).fetchone()
         consumer_phone = conn.execute("SELECT phone FROM users WHERE name = ?", (trade['consumer'],)).fetchone()
         if producer_phone and producer_phone['phone']:
@@ -420,6 +413,26 @@ def validate_trade(trade_id):
             simulate_sms(consumer_phone['phone'], f'❌ Trade {trade_id} failed. Refund of ₦{trade["total_price"]} processed.')
         conn.close()
         return jsonify({'status': 'failed'})
+
+# ---------- NEW: Reject Endpoint ----------
+@app.route('/api/trades/<trade_id>/reject', methods=['POST'])
+@login_required
+def reject_trade(trade_id):
+    conn = get_db()
+    trade = conn.execute("SELECT * FROM trades WHERE id = ? AND status='pending'", (trade_id,)).fetchone()
+    if not trade:
+        conn.close()
+        return jsonify({'error': 'Trade not found or already processed'}), 404
+
+    conn.execute("UPDATE trades SET status='failed' WHERE id = ?", (trade_id,))
+    conn.commit()
+    
+    consumer_phone = conn.execute("SELECT phone FROM users WHERE name = ?", (trade['consumer'],)).fetchone()
+    if consumer_phone and consumer_phone['phone']:
+        simulate_sms(consumer_phone['phone'], f'❌ Trade {trade_id} rejected by producer. Refund of ₦{trade["total_price"]} processed.')
+    
+    conn.close()
+    return jsonify({'status': 'rejected'})
 
 @app.route('/api/stats')
 @login_required
@@ -506,14 +519,12 @@ def chat():
     message = data.get('message', '').lower()
     user_id = current_user.user_id
 
-    # Get user name
     conn = get_db()
     user = conn.execute("SELECT name, type FROM users WHERE id = ?", (user_id,)).fetchone()
     conn.close()
     if not user:
         return jsonify({'response': "❌ User not found."})
 
-    # Simple intent recognition
     if 'buy' in message and 'kwh' in message:
         match = re.search(r'buy\s+(\d+\.?\d*)\s*kwh\s+from\s+([\w\s]+)', message)
         if match:
