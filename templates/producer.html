@@ -7,23 +7,75 @@
     <style>
         * { margin:0; padding:0; box-sizing:border-box; }
         body { font-family:'Segoe UI',sans-serif; background:#f1f5f9; color:#0f172a; }
-        .navbar { background:#0f172a; color:white; padding:1rem 2rem; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; }
+        .navbar {
+            background:#0f172a; color:white; padding:1rem 2rem;
+            display:flex; justify-content:space-between; align-items:center;
+            flex-wrap:wrap;
+        }
         .navbar .logo { font-size:1.5rem; font-weight:700; }
         .navbar .logo span { color:#facc15; }
         .navbar .logout { color:#f87171; text-decoration:none; }
         .container { max-width:1200px; margin:0 auto; padding:20px; }
-        .card { background:white; border-radius:12px; padding:20px; box-shadow:0 1px 3px rgba(0,0,0,0.06); border:1px solid #e2e8f0; margin-bottom:20px; }
+        .card {
+            background:white; border-radius:12px; padding:20px;
+            box-shadow:0 1px 3px rgba(0,0,0,0.06); border:1px solid #e2e8f0;
+            margin-bottom:20px;
+        }
         .grid-2 { display:grid; grid-template-columns:1fr 1fr; gap:20px; }
+        .grid-4 { display:grid; grid-template-columns:repeat(4,1fr); gap:20px; }
         .stat-number { font-size:2rem; font-weight:700; }
         .stat-label { color:#64748b; }
+        .stat-green { color:#22c55e; }
+        .stat-blue { color:#3b82f6; }
         .trade-table { width:100%; border-collapse:collapse; font-size:0.9rem; }
         .trade-table th { background:#f8fafc; text-align:left; padding:8px 12px; }
         .trade-table td { padding:8px 12px; border-bottom:1px solid #e2e8f0; }
-        .status-badge { display:inline-block; padding:2px 12px; border-radius:9999px; font-size:0.75rem; font-weight:600; }
+        .status-badge {
+            display:inline-block; padding:2px 12px; border-radius:9999px;
+            font-size:0.75rem; font-weight:600;
+        }
         .status-pending { background:#fefcbf; color:#975a16; }
         .status-completed { background:#c6f6d5; color:#22543d; }
         .status-failed { background:#fed7d7; color:#9b2c2c; }
-        @media (max-width:768px) { .grid-2 { grid-template-columns:1fr; } }
+        .btn {
+            padding:8px 16px; border:none; border-radius:6px;
+            font-weight:600; cursor:pointer; transition:0.2s;
+        }
+        .btn-success { background:#22c55e; color:white; }
+        .btn-success:hover { background:#16a34a; }
+        .btn-danger { background:#ef4444; color:white; }
+        .btn-danger:hover { background:#dc2626; }
+        .live-indicator {
+            display:inline-block; width:12px; height:12px; border-radius:50%;
+            margin-right:8px;
+        }
+        .live-on { background:#22c55e; animation: pulse 1.5s infinite; }
+        .live-off { background:#ef4444; }
+        @keyframes pulse {
+            0% { opacity:1; transform:scale(1); }
+            50% { opacity:0.5; transform:scale(0.9); }
+            100% { opacity:1; transform:scale(1); }
+        }
+        #chatWidget { position:fixed; bottom:20px; right:20px; z-index:9999; }
+        #chatWidget button {
+            background:#3b82f6; color:white; border:none; border-radius:50%;
+            width:60px; height:60px; font-size:28px;
+            box-shadow:0 4px 12px rgba(0,0,0,0.3); cursor:pointer;
+        }
+        #chatBox {
+            display:none; position:absolute; bottom:70px; right:0;
+            width:350px; max-height:400px; background:white; border-radius:12px;
+            box-shadow:0 4px 20px rgba(0,0,0,0.2); overflow:hidden;
+            border:1px solid #e2e8f0;
+        }
+        #chatBox .header { background:#0f172a; color:white; padding:10px 15px; font-weight:bold; }
+        #chatMessages { height:250px; overflow-y:auto; padding:10px; background:#f8fafc; }
+        #chatMessages div { margin:5px 0; }
+        #chatInput { flex:1; padding:8px; border:1px solid #cbd5e1; border-radius:6px; margin-right:8px; }
+        @media (max-width:768px) {
+            .grid-2, .grid-4 { grid-template-columns:1fr; }
+            #chatBox { width:280px; right:-10px; }
+        }
     </style>
 </head>
 <body>
@@ -34,14 +86,31 @@
             <a href="/logout" class="logout">🚪 Logout</a>
         </div>
     </nav>
+
     <div class="container">
-        <div class="grid-2">
+        <!-- Live Status -->
+        <div class="card" style="background:#f0fdf4; border-color:#22c55e;">
+            <div style="display:flex; align-items:center; gap:10px;">
+                <span class="live-indicator live-on"></span>
+                <span style="font-weight:bold; color:#166534;">☀️ System Online – Producing Power</span>
+                <span style="margin-left:auto; color:#166534; font-size:0.9rem;" id="productionStatus">Exporting: 2.1 kW</span>
+            </div>
+            <div style="display:flex; gap:20px; margin-top:10px; flex-wrap:wrap;">
+                <div><span style="color:#64748b;">Current Generation:</span> <strong id="currentGeneration">3.5 kW</strong></div>
+                <div><span style="color:#64748b;">Current Export:</span> <strong id="currentExport">2.1 kW</strong></div>
+                <div><span style="color:#64748b;">Remaining Excess:</span> <strong id="remainingExcess">{{ user['excess'] or '3.2 kWh' }}</strong></div>
+                <div><span style="color:#64748b;">Today's Earnings:</span> <strong id="todayEarnings">₦0.00</strong></div>
+            </div>
+        </div>
+
+        <!-- Stats -->
+        <div class="grid-4">
             <div class="card">
                 <div class="stat-number">⚡ {{ user['capacity'] or 'N/A' }}</div>
                 <div class="stat-label">Solar Capacity</div>
             </div>
             <div class="card">
-                <div class="stat-number">🔋 {{ user['excess'] or '0kWh' }}</div>
+                <div class="stat-number stat-green">{{ user['excess'] or '0kWh' }}</div>
                 <div class="stat-label">Current Excess</div>
             </div>
             <div class="card">
@@ -49,18 +118,75 @@
                 <div class="stat-label">Total Earnings</div>
             </div>
             <div class="card">
-                <div class="stat-number">{{ trades|length }}</div>
-                <div class="stat-label">Trades Made</div>
+                <div class="stat-number stat-blue" id="todayEarningsStat">₦0.00</div>
+                <div class="stat-label">Today's Earnings</div>
             </div>
         </div>
 
+        <!-- Active Consumers (Who you're giving power to) -->
         <div class="card">
-            <h3>📊 Your Trades</h3>
-            {% if trades %}
+            <h3>🔌 Active Consumers</h3>
+            <div id="activeConsumers">
+                <div style="display:flex; justify-content:space-between; padding:10px 0; border-bottom:1px solid #e2e8f0;">
+                    <span><span class="live-indicator live-on"></span> <strong>Mama Bose</strong></span>
+                    <span>📍 Awkunanaw</span>
+                    <span>⚡ 1.2 kW</span>
+                    <span style="color:#22c55e;">● Active</span>
+                </div>
+                <div style="display:flex; justify-content:space-between; padding:10px 0; border-bottom:1px solid #e2e8f0;">
+                    <span><span class="live-indicator live-off"></span> <strong>Mr. Emeka</strong></span>
+                    <span>📍 GRA</span>
+                    <span>⚡ 0 kW</span>
+                    <span style="color:#ef4444;">○ Offline</span>
+                </div>
+                <div style="display:flex; justify-content:space-between; padding:10px 0;">
+                    <span><span class="live-indicator live-off"></span> <strong>Mrs. Obi</strong></span>
+                    <span>📍 Independence Layout</span>
+                    <span>⚡ 0 kW</span>
+                    <span style="color:#ef4444;">○ Offline</span>
+                </div>
+            </div>
+            <div style="margin-top:8px; font-size:0.8rem; color:#64748b;">
+                🔒 Privacy: Consumers are shown anonymously unless both parties agree to share names.
+            </div>
+        </div>
+
+        <!-- Pending Requests -->
+        <div class="card">
+            <h3>⏳ Pending Requests</h3>
+            {% set pending = trades|selectattr('status', 'equalto', 'pending')|list %}
+            {% if pending %}
+            <table class="trade-table">
+                <thead><tr><th>ID</th><th>Consumer</th><th>kWh</th><th>Amount</th><th>Action</th></tr></thead>
+                <tbody>
+                {% for t in pending %}
+                <tr>
+                    <td>{{ t['id'][-8:] }}</td>
+                    <td>{{ t['consumer'] }}</td>
+                    <td>{{ t['kwh'] }}</td>
+                    <td>₦{{ t['total_price'] }}</td>
+                    <td>
+                        <button class="btn btn-success" onclick="acceptTrade('{{ t['id'] }}')">✅ Accept</button>
+                        <button class="btn btn-danger" onclick="rejectTrade('{{ t['id'] }}')">❌ Reject</button>
+                    </td>
+                </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+            {% else %}
+            <p style="color:#94a3b8;">No pending requests.</p>
+            {% endif %}
+        </div>
+
+        <!-- Trade History -->
+        <div class="card">
+            <h3>📊 Your Sales History</h3>
+            {% set completed = trades|selectattr('status', 'in', ['completed','failed'])|list %}
+            {% if completed %}
             <table class="trade-table">
                 <thead><tr><th>ID</th><th>Consumer</th><th>kWh</th><th>Amount</th><th>Status</th></tr></thead>
                 <tbody>
-                {% for t in trades %}
+                {% for t in completed %}
                 <tr>
                     <td>{{ t['id'][-8:] }}</td>
                     <td>{{ t['consumer'] }}</td>
@@ -72,9 +198,120 @@
                 </tbody>
             </table>
             {% else %}
-            <p style="color:#94a3b8;">No trades yet. Start selling your excess energy!</p>
+            <p style="color:#94a3b8;">You have no sales history.</p>
             {% endif %}
         </div>
     </div>
+
+    <!-- Chat Widget -->
+    <div id="chatWidget">
+        <button onclick="toggleChat()">💬</button>
+        <div id="chatBox">
+            <div class="header">🤖 Trade Assistant</div>
+            <div id="chatMessages"></div>
+            <div style="display:flex; padding:10px; border-top:1px solid #e2e8f0;">
+                <input id="chatInput" type="text" placeholder="Ask me anything..." style="flex:1; padding:8px; border:1px solid #cbd5e1; border-radius:6px;">
+                <button onclick="sendMessage()" style="background:#3b82f6; color:white; border:none; padding:8px 15px; border-radius:6px; margin-left:8px;">Send</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ============================================
+        // Accept / Reject Trade
+        // ============================================
+        async function acceptTrade(tradeId) {
+            if (!confirm('Accept this trade? Power will be delivered.')) return;
+            try {
+                const res = await fetch(`/api/trades/${tradeId}/validate`, { method: 'POST' });
+                const data = await res.json();
+                if (data.status === 'completed') {
+                    alert('✅ Trade accepted and completed!');
+                    location.reload();
+                } else {
+                    alert('❌ Delivery failed. Please try again.');
+                }
+            } catch (e) {
+                alert('Error: ' + e.message);
+            }
+        }
+
+        async function rejectTrade(tradeId) {
+            if (!confirm('Reject this trade? Consumer will be refunded.')) return;
+            try {
+                const res = await fetch(`/api/trades/${tradeId}/reject`, { method: 'POST' });
+                if (res.ok) {
+                    alert('❌ Trade rejected. Consumer refunded.');
+                    location.reload();
+                } else {
+                    alert('Error rejecting trade.');
+                }
+            } catch (e) {
+                alert('Error: ' + e.message);
+            }
+        }
+
+        // ============================================
+        // AI Chat
+        // ============================================
+        function toggleChat() {
+            const box = document.getElementById('chatBox');
+            box.style.display = box.style.display === 'none' ? 'block' : 'none';
+        }
+
+        async function sendMessage() {
+            const input = document.getElementById('chatInput');
+            const msg = input.value.trim();
+            if (!msg) return;
+            input.value = '';
+            addChatMessage('You', msg);
+            try {
+                const res = await fetch('/api/chat', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ message: msg })
+                });
+                const data = await res.json();
+                addChatMessage('Assistant', data.response);
+            } catch (e) {
+                addChatMessage('Assistant', '❌ Error connecting to assistant.');
+            }
+        }
+
+        function addChatMessage(sender, text) {
+            const container = document.getElementById('chatMessages');
+            const div = document.createElement('div');
+            div.style.margin = '5px 0';
+            div.innerHTML = `<strong>${sender}:</strong> ${text}`;
+            container.appendChild(div);
+            container.scrollTop = container.scrollHeight;
+        }
+
+        document.getElementById('chatInput').addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') sendMessage();
+        });
+
+        // ============================================
+        // Simulate live updates
+        // ============================================
+        function simulateLiveData() {
+            const generation = (Math.random() * 2 + 2).toFixed(1);
+            const exportPower = (Math.random() * 1.5 + 1).toFixed(1);
+            const earnings = (Math.random() * 500 + 100).toFixed(2);
+            document.getElementById('currentGeneration').textContent = `${generation} kW`;
+            document.getElementById('currentExport').textContent = `${exportPower} kW`;
+            document.getElementById('productionStatus').textContent = `Exporting: ${exportPower} kW`;
+            document.getElementById('todayEarnings').textContent = `₦${earnings}`;
+            document.getElementById('todayEarningsStat').textContent = `₦${earnings}`;
+        }
+
+        // ============================================
+        // Init
+        // ============================================
+        document.addEventListener('DOMContentLoaded', () => {
+            simulateLiveData();
+            setInterval(simulateLiveData, 5000);
+        });
+    </script>
 </body>
 </html>
